@@ -1,0 +1,116 @@
+import { createContext, useContext, useEffect, useState } from 'react'
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+} from 'firebase/firestore'
+import { db } from '../lib/firebase'
+import { callFunction } from '../lib/api'
+import { useAuth } from './AuthContext'
+
+// Текущий «бренд-аккаунт» (tenant). Пользователь может владеть несколькими,
+// вся панель всегда работает в контексте выбранного (scoping по currentId).
+const AccountContext = createContext(null)
+
+export function AccountProvider({ children }) {
+  const { user } = useAuth()
+  const [accounts, setAccounts] = useState([])
+  const [currentId, setCurrentId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (!user) {
+      setAccounts([])
+      setCurrentId(null)
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    // Все данные строго отфильтрованы по владельцу — основа multi-tenant изоляции на клиенте.
+    const q = query(collection(db, 'accounts'), where('ownerUid', '==', user.uid))
+    return onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (a.brandName || '').localeCompare(b.brandName || '', 'ru'))
+        setAccounts(list)
+        setCurrentId((prev) => (list.some((a) => a.id === prev) ? prev : list[0]?.id ?? null))
+        setError(null)
+        setLoading(false)
+      },
+      (err) => {
+        console.error('accounts subscription failed', err)
+        setError(err)
+        setLoading(false)
+      }
+    )
+  }, [user])
+
+  // Создать новый бренд-аккаунт (можно сколько угодно).
+  async function createAccount(brandName) {
+    const ref = await addDoc(collection(db, 'accounts'), {
+      ownerUid: user.uid,
+      brandName,
+      instagramBusinessId: null,
+      instagramUsername: null,
+      connectionStatus: 'disconnected',
+      createdAt: serverTimestamp(),
+    })
+    await setDoc(doc(db, 'accounts', ref.id, 'settings', 'bot'), {
+      toneOfVoice: '',
+      brandContext: '',
+      forbiddenTopics: [],
+      language: 'auto',
+      useEmojis: true,
+      signature: '',
+      autoReplyComments: false,
+      autoReplyDms: false,
+      draftMode: true,
+      escalateNegative: true,
+      updatedAt: serverTimestamp(),
+    })
+    setCurrentId(ref.id)
+    return ref.id
+  }
+
+  // Запускает OAuth Instagram для конкретного аккаунта — редиректит на Instagram.
+  async function connectInstagram(accountId) {
+    const { authUrl } = await callFunction('connect-instagram', { accountId })
+    if (!authUrl) throw new Error('Сервер не вернул ссылку авторизации')
+    window.location.href = authUrl
+  }
+
+  // Отвязывает Instagram (удаляет токен на бэкенде).
+  async function disconnectInstagram(accountId) {
+    await callFunction('connect-instagram', { accountId, action: 'disconnect' })
+  }
+
+  const account = accounts.find((a) => a.id === currentId) ?? null
+
+  return (
+    <AccountContext.Provider
+      value={{
+        accounts,
+        account,
+        currentId,
+        setCurrentId,
+        createAccount,
+        connectInstagram,
+        disconnectInstagram,
+        loading,
+        error,
+      }}
+    >
+      {children}
+    </AccountContext.Provider>
+  )
+}
+
+export const useAccount = () => useContext(AccountContext)

@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// Multi-tenant модель: каждый документ accounts/{accountId} — один клиент (tenant).
+// Netlify Functions работают через Admin SDK и обходят эти правила,
+// поэтому "allow write: if false" означает «пишет только backend».
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(accountId) {
+      return request.auth != null
+        && get(/databases/$(database)/documents/accounts/$(accountId)).data.ownerUid == request.auth.uid;
+    }
+
+    match /accounts/{accountId} {
+      allow read: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.brandName is string
+        && request.resource.data.brandName.size() > 0
+        && request.resource.data.connectionStatus == 'disconnected';
+
+      // Поля подключения Instagram клиент менять не может — их пишет только backend.
+      allow update: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['ownerUid', 'instagramBusinessId', 'instagramUsername', 'connectionStatus']);
+
+      allow delete: if false;
+
+      // Настройки бота: тон, запрещённые темы, тумблеры, режим черновика.
+      match /settings/{docId} {
+        allow read, write: if isOwner(accountId);
+      }
+
+      // Очередь автопостинга. Клиент управляет контентом и постановкой в очередь,
+      // но НЕ может подделывать поля пайплайна публикации (их пишет только backend):
+      // клиентские правки всегда оставляют статус 'pending', а publishedMediaId/permalink/
+      // publishedAt/attempts недоступны для записи. Backend (Admin SDK) обходит эти правила.
+      match /scheduled_posts/{postId} {
+        function clientPostKeys() {
+          return ['caption', 'mediaType', 'mediaUrl', 'scheduledAt', 'status',
+                  'createdAt', 'updatedAt', 'error', 'containerId', 'leaseUntil',
+                  'firstComment', 'collaborators', 'locationId', 'altText',
+                  'coverUrl', 'shareToFeed'];
+        }
+        allow read: if isOwner(accountId);
+        allow create: if isOwner(accountId)
+          && request.resource.data.status == 'pending'
+          && request.resource.data.keys().hasOnly(clientPostKeys());
+        allow update: if isOwner(accountId)
+          && resource.data.status in ['pending', 'failed']   // published/processing правит только backend
+          && request.resource.data.status == 'pending'        // клиент может лишь (пере)ставить в очередь
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(clientPostKeys());
+        allow delete: if isOwner(accountId);
+      }
+
+      // Лог обработанных комментариев/сообщений: клиенту только чтение.
+      match /interactions/{interactionId} {
+        allow read: if isOwner(accountId);
+        allow write: if false;
+      }
+
+      // Зашифрованные access-токены: клиенту недоступны вообще, только Admin SDK.
+      match /private/{docId} {
+        allow read, write: if false;
+      }
+    }
+  }
+}

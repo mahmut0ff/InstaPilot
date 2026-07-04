@@ -1,0 +1,51 @@
+# Сборка фронтенда и конфигурация serverless-функций
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # firebase-admin содержит динамические require — не бандлим его esbuild'ом,
+  # а кладём как есть из node_modules (рекомендация Netlify).
+  external_node_modules = ["firebase-admin"]
+
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888
+
+# Единый источник редиректов (и для прода, и для `netlify dev`).
+# Порядок важен: правила применяются сверху вниз, SPA-fallback — последним.
+
+# Функции: /api/health -> /.netlify/functions/health
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Пробрасываем внутренние запросы Vite к dev-серверу как есть, иначе SPA-fallback
+# ниже перехватил бы /src/main.jsx, /@vite/client и т.п. и отдал index.html
+# (из-за чего Vite падал и была белая страница). В проде этих путей нет — правила
+# безвредны (реальные ассеты лежат в /assets и отдаются как статические файлы).
+[[redirects]]
+  from = "/@*"
+  to = "/@:splat"
+  status = 200
+[[redirects]]
+  from = "/src/*"
+  to = "/src/:splat"
+  status = 200
+[[redirects]]
+  from = "/node_modules/*"
+  to = "/node_modules/:splat"
+  status = 200
+
+# SPA-fallback для React Router (последним, ловит только «навигационные» маршруты).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

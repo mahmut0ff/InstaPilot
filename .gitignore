@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.netlify/
+
+# секреты — только локально и в Netlify env vars
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log

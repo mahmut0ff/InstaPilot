@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InstaPilot — панель управления</title>
+    <script>
+      window.addEventListener('error', function(event) {
+        var errDiv = document.getElementById('debug-error-box');
+        if (!errDiv) {
+          errDiv = document.createElement('div');
+          errDiv.id = 'debug-error-box';
+          errDiv.style.cssText = 'color: #b91c1c; padding: 24px; background: #fef2f2; border: 2px solid #fecaca; margin: 24px; font-family: monospace; white-space: pre-wrap; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative; z-index: 999999;';
+          document.body.insertBefore(errDiv, document.body.firstChild);
+        }
+        errDiv.innerHTML = '<h3 style="margin-top:0;color:#991b1b;">Runtime Error:</h3>' + event.message + '\n at ' + event.filename + ':' + event.lineno + ':' + event.colno + '\n\nStack:\n' + (event.error ? event.error.stack : 'N/A');
+      });
+      window.addEventListener('unhandledrejection', function(event) {
+        var errDiv = document.getElementById('debug-error-box');
+        if (!errDiv) {
+          errDiv = document.createElement('div');
+          errDiv.id = 'debug-error-box';
+          errDiv.style.cssText = 'color: #b91c1c; padding: 24px; background: #fef2f2; border: 2px solid #fecaca; margin: 24px; font-family: monospace; white-space: pre-wrap; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative; z-index: 999999;';
+          document.body.insertBefore(errDiv, document.body.firstChild);
+        }
+        errDiv.innerHTML = '<h3 style="margin-top:0;color:#991b1b;">Unhandled Promise Rejection:</h3>' + event.reason + '\n\nStack:\n' + (event.reason && event.reason.stack ? event.reason.stack : event.reason);
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Медиа для постов лежит в uploads/{uid}/{accountId}/...
+// Writes — только владелец и только фото/видео разумного размера.
+// Instagram забирает файл по токенизированной download-ссылке (getDownloadURL),
+// которая работает независимо от этих правил, поэтому read держим только для владельца.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /uploads/{uid}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 300 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType.matches('video/.*'));
+    }
+  }
+}
