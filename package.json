@@ -19,5 +19,9 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^6.0.7"
+  },
+  "comment:overrides": "jwks-rsa@4 (через firebase-admin) делает require('jose'), а jose@6 — ESM-only. На Lambda-рантайме Netlify (Node < 22.12) это падало с ERR_REQUIRE_ESM. jose@4 ships CJS-сборку и require()-ится на любом Node. firebase-admin ходит в jose только через jwks-rsa и не напрямую.",
+  "overrides": {
+    "jose": "^4.15.9"
   }
 }

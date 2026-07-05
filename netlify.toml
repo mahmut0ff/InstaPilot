@@ -4,8 +4,10 @@
   publish = "dist"
 
 [build.environment]
-  # Node 22: поддерживает require() ESM-модулей (нужно для jose@6 внутри firebase-admin).
-  # На Node 20 функции падали с "require() of ES Module .../jose/dist/webapi".
+  # Node 22 для сборки. ВНИМАНИЕ: require() ESM работает только на Node >= 22.12,
+  # а Lambda-рантайм Netlify может быть ниже — поэтому одного NODE_VERSION мало.
+  # Реальный фикс "require() of ES Module .../jose" — overrides.jose=^4 в package.json
+  # (jose@4 ships CJS-сборку). Не удаляй override, полагаясь на этот NODE_VERSION.
   NODE_VERSION = "22"
 
 [functions]
