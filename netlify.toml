@@ -4,7 +4,9 @@
   publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20"
+  # Node 22: поддерживает require() ESM-модулей (нужно для jose@6 внутри firebase-admin).
+  # На Node 20 функции падали с "require() of ES Module .../jose/dist/webapi".
+  NODE_VERSION = "22"
 
 [functions]
   directory = "netlify/functions"
