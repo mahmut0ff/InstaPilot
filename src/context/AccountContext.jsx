@@ -12,9 +12,12 @@ import {
 import { db } from '../lib/firebase'
 import { callFunction } from '../lib/api'
 import { useAuth } from './AuthContext'
+import { SINGLE_ACCOUNT_MODE } from '../../shared/config.mjs'
 
-// Текущий «бренд-аккаунт» (tenant). Пользователь может владеть несколькими,
-// вся панель всегда работает в контексте выбранного (scoping по currentId).
+// Текущий «бренд-аккаунт» (tenant). Вся панель всегда работает в контексте
+// выбранного (scoping по currentId) — это не меняется от режима.
+// При SINGLE_ACCOUNT_MODE аккаунт ровно один: список всё равно грузим запросом
+// по ownerUid (та же изоляция), просто создать второй нельзя, а переключаться не из чего.
 const AccountContext = createContext(null)
 
 export function AccountProvider({ children }) {
@@ -53,8 +56,14 @@ export function AccountProvider({ children }) {
     )
   }, [user])
 
-  // Создать новый бренд-аккаунт (можно сколько угодно).
+  // В режиме одного аккаунта создать бренд можно только пока его нет.
+  const canCreateAccount = !SINGLE_ACCOUNT_MODE || accounts.length === 0
+
+  // Создать новый бренд-аккаунт.
   async function createAccount(brandName) {
+    if (!canCreateAccount) {
+      throw new Error('Сейчас проект работает с одним аккаунтом — второй бренд создать нельзя')
+    }
     const ref = await addDoc(collection(db, 'accounts'), {
       ownerUid: user.uid,
       brandName,
@@ -101,6 +110,8 @@ export function AccountProvider({ children }) {
         account,
         currentId,
         setCurrentId,
+        singleAccountMode: SINGLE_ACCOUNT_MODE,
+        canCreateAccount,
         createAccount,
         connectInstagram,
         disconnectInstagram,

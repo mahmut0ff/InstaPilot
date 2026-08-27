@@ -47,6 +47,13 @@
   from = "/node_modules/*"
   to = "/node_modules/:splat"
   status = 200
+# shared/config.mjs импортируют и панель, и функции. В dev Vite отдаёт его по этому
+# пути — без правила SPA-fallback вернул бы index.html и модуль не загрузился бы.
+# В проде файл уже внутри бандла, правило безвредно.
+[[redirects]]
+  from = "/shared/*"
+  to = "/shared/:splat"
+  status = 200
 
 # SPA-fallback для React Router (последним, ловит только «навигационные» маршруты).
 [[redirects]]

@@ -21,6 +21,8 @@ export default function Accounts() {
     setCurrentId,
     loading,
     error,
+    singleAccountMode,
+    canCreateAccount,
     createAccount,
     connectInstagram,
     disconnectInstagram,
@@ -112,13 +114,19 @@ export default function Accounts() {
   return (
     <>
       <PageHeader
-        title="Аккаунты"
-        sub="Подключайте несколько Instagram Business/Creator-профилей и управляйте каждым отдельно"
+        title={singleAccountMode ? 'Instagram-аккаунт' : 'Аккаунты'}
+        sub={
+          singleAccountMode
+            ? 'Один Business/Creator-профиль: от его имени идут автопостинг и автоответы на комментарии'
+            : 'Подключайте несколько Instagram Business/Creator-профилей и управляйте каждым отдельно'
+        }
         actions={
-          <button className="btn btn-primary" onClick={() => setAdding((v) => !v)}>
-            <Plus size={16} />
-            Добавить бренд
-          </button>
+          canCreateAccount && (
+            <button className="btn btn-primary" onClick={() => setAdding((v) => !v)}>
+              <Plus size={16} />
+              {singleAccountMode ? 'Создать бренд' : 'Добавить бренд'}
+            </button>
+          )
         }
       />
 
@@ -139,11 +147,15 @@ export default function Accounts() {
         </div>
       )}
 
-      <div className="grid-stats">
-        <StatCard icon={Users} tone="blue" value={stats.total} label="Всего брендов" />
-        <StatCard icon={CircleCheck} tone="green" value={stats.connected} label="Подключено" />
-        <StatCard icon={TriangleAlert} tone="orange" value={stats.attention} label="Требуют действия" />
-      </div>
+      {/* Сводка по нескольким брендам нужна только в multi-режиме — при одном аккаунте
+          всё то же самое видно на его карточке ниже. */}
+      {!singleAccountMode && (
+        <div className="grid-stats">
+          <StatCard icon={Users} tone="blue" value={stats.total} label="Всего брендов" />
+          <StatCard icon={CircleCheck} tone="green" value={stats.connected} label="Подключено" />
+          <StatCard icon={TriangleAlert} tone="orange" value={stats.attention} label="Требуют действия" />
+        </div>
+      )}
 
       {adding && (
         <form className="card" style={{ marginBottom: 16 }} onSubmit={handleCreate}>
@@ -187,8 +199,8 @@ export default function Accounts() {
         <div className="card">
           <EmptyState
             icon={Users}
-            title="Пока нет ни одного бренда"
-            text="Создайте первый бренд-аккаунт и подключите к нему Instagram."
+            title="Бренд ещё не создан"
+            text="Создайте бренд-аккаунт и подключите к нему Instagram."
           />
         </div>
       ) : (
@@ -197,6 +209,7 @@ export default function Accounts() {
             <AccountCard
               key={a.id}
               account={a}
+              single={singleAccountMode}
               isCurrent={a.id === currentId}
               busy={busyId === a.id}
               onSelect={() => setCurrentId(a.id)}
@@ -210,7 +223,7 @@ export default function Accounts() {
   )
 }
 
-function AccountCard({ account, isCurrent, busy, onSelect, onConnect, onDisconnect }) {
+function AccountCard({ account, single, isCurrent, busy, onSelect, onConnect, onDisconnect }) {
   const status = statusMeta(account.connectionStatus)
   const connected = account.connectionStatus === 'connected'
   const days = daysLeft(account.tokenExpiresAt)
@@ -224,7 +237,7 @@ function AccountCard({ account, isCurrent, busy, onSelect, onConnect, onDisconne
       <div className="account-main">
         <div className="account-title-row">
           <h3>{account.brandName}</h3>
-          {isCurrent && <span className="chip chip-green">активный</span>}
+          {isCurrent && !single && <span className="chip chip-green">активный</span>}
         </div>
         <div className="account-meta">
           <span className={`badge ${status.tone}`}>

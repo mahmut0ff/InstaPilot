@@ -16,12 +16,12 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { useAccount } from '../context/AccountContext'
 
-const NAV = [
+const navGroups = (single) => [
   {
     section: 'Обзор',
     items: [
       { to: '/', icon: LayoutDashboard, label: 'Дашборд', end: true },
-      { to: '/accounts', icon: AtSign, label: 'Аккаунты' },
+      { to: '/accounts', icon: AtSign, label: single ? 'Instagram-аккаунт' : 'Аккаунты' },
     ],
   },
   {
@@ -39,9 +39,10 @@ const NAV = [
 
 export default function Layout() {
   const { user, logout } = useAuth()
-  const { account } = useAccount()
+  const { account, singleAccountMode } = useAccount()
   const navigate = useNavigate()
   const connected = account?.connectionStatus === 'connected'
+  const NAV = navGroups(singleAccountMode)
 
   return (
     <div className="layout">
@@ -102,7 +103,7 @@ export default function Layout() {
 }
 
 function AccountSwitcher() {
-  const { accounts, account, setCurrentId } = useAccount()
+  const { accounts, account, setCurrentId, singleAccountMode } = useAccount()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -118,6 +119,18 @@ function AccountSwitcher() {
   if (!account) return null
 
   const dotClass = (a) => (a.connectionStatus === 'connected' ? 'dot dot-green' : 'dot dot-orange')
+
+  // Один аккаунт — переключать нечего: показываем бренд и ведём на страницу аккаунта.
+  if (singleAccountMode) {
+    return (
+      <div className="sb-account">
+        <button className="sb-account-btn" onClick={() => navigate('/accounts')} title="Instagram-аккаунт">
+          <span className={dotClass(account)} />
+          <span className="sb-account-name">{account.brandName}</span>
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="sb-account" ref={ref}>
