@@ -1319,6 +1319,24 @@ textarea {
   font-weight: 700;
 }
 
+/* Инлайновое переименование бренда: поле занимает место заголовка, кнопки не сжимаются. */
+.account-rename {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.account-rename input {
+  flex: 1;
+  min-width: 180px;
+}
+
+.account-rename .btn {
+  flex-shrink: 0;
+}
+
 .account-meta {
   display: flex;
   align-items: center;

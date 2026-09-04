@@ -7,6 +7,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
@@ -89,6 +90,15 @@ export function AccountProvider({ children }) {
     return ref.id
   }
 
+  // Переименовать бренд. Имя видно в панели и подставляется в системный промпт Gemini
+  // («Ты — SMM-ассистент бренда ...»), поэтому менять его — не косметика.
+  // Поля подключения Instagram правилами Firestore клиенту закрыты, brandName — разрешён.
+  async function renameAccount(accountId, brandName) {
+    const name = brandName.trim()
+    if (!name) throw new Error('Название бренда не может быть пустым')
+    await updateDoc(doc(db, 'accounts', accountId), { brandName: name })
+  }
+
   // Запускает OAuth Instagram для конкретного аккаунта — редиректит на Instagram.
   async function connectInstagram(accountId) {
     const { authUrl } = await callFunction('connect-instagram', { accountId })
@@ -113,6 +123,7 @@ export function AccountProvider({ children }) {
         singleAccountMode: SINGLE_ACCOUNT_MODE,
         canCreateAccount,
         createAccount,
+        renameAccount,
         connectInstagram,
         disconnectInstagram,
         loading,

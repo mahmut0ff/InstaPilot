@@ -5,6 +5,7 @@ import {
   CircleCheck,
   Clock,
   Link as LinkIcon,
+  Pencil,
   Plus,
   TriangleAlert,
   Unlink,
@@ -24,6 +25,7 @@ export default function Accounts() {
     singleAccountMode,
     canCreateAccount,
     createAccount,
+    renameAccount,
     connectInstagram,
     disconnectInstagram,
   } = useAccount()
@@ -212,6 +214,7 @@ export default function Accounts() {
               single={singleAccountMode}
               isCurrent={a.id === currentId}
               busy={busyId === a.id}
+              onRename={(name) => renameAccount(a.id, name)}
               onSelect={() => setCurrentId(a.id)}
               onConnect={() => handleConnect(a.id)}
               onDisconnect={() => handleDisconnect(a.id, a.brandName)}
@@ -223,10 +226,33 @@ export default function Accounts() {
   )
 }
 
-function AccountCard({ account, single, isCurrent, busy, onSelect, onConnect, onDisconnect }) {
+function AccountCard({ account, single, isCurrent, busy, onRename, onSelect, onConnect, onDisconnect }) {
   const status = statusMeta(account.connectionStatus)
   const connected = account.connectionStatus === 'connected'
   const days = daysLeft(account.tokenExpiresAt)
+
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(account.brandName || '')
+  const [renaming, setRenaming] = useState(false)
+  const [renameError, setRenameError] = useState('')
+
+  async function submitRename(e) {
+    e.preventDefault()
+    if (!draft.trim() || draft.trim() === account.brandName) {
+      setEditing(false)
+      return
+    }
+    setRenaming(true)
+    setRenameError('')
+    try {
+      await onRename(draft)
+      setEditing(false)
+    } catch (err) {
+      setRenameError(err.code ?? err.message)
+    } finally {
+      setRenaming(false)
+    }
+  }
 
   return (
     <div className={`card account-card${isCurrent ? ' is-current' : ''}`}>
@@ -236,9 +262,48 @@ function AccountCard({ account, single, isCurrent, busy, onSelect, onConnect, on
 
       <div className="account-main">
         <div className="account-title-row">
-          <h3>{account.brandName}</h3>
-          {isCurrent && !single && <span className="chip chip-green">активный</span>}
+          {editing ? (
+            <form className="account-rename" onSubmit={submitRename}>
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                aria-label="Название бренда"
+                placeholder="Название бренда"
+              />
+              <button className="btn btn-primary" type="submit" disabled={renaming}>
+                {renaming ? 'Сохраняем…' : 'Сохранить'}
+              </button>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  setEditing(false)
+                  setDraft(account.brandName || '')
+                  setRenameError('')
+                }}
+              >
+                Отмена
+              </button>
+            </form>
+          ) : (
+            <>
+              <h3>{account.brandName}</h3>
+              <button
+                className="btn-icon"
+                title="Переименовать бренд"
+                onClick={() => {
+                  setDraft(account.brandName || '')
+                  setEditing(true)
+                }}
+              >
+                <Pencil size={14} />
+              </button>
+              {isCurrent && !single && <span className="chip chip-green">активный</span>}
+            </>
+          )}
         </div>
+        {renameError && <p className="account-error">Не удалось переименовать: {renameError}</p>}
         <div className="account-meta">
           <span className={`badge ${status.tone}`}>
             <span className="dot" />
