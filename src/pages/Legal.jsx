@@ -3,9 +3,9 @@
 import { Link } from 'react-router-dom'
 import { Zap } from 'lucide-react'
 
-// ВНИМАНИЕ: подставьте рабочий контакт до публикации приложения — Meta проверяет,
-// что по указанному адресу с вами действительно можно связаться.
-const CONTACT_EMAIL = 'УКАЖИТЕ_EMAIL@example.com'
+// Контакт для запросов по данным. Meta проверяет, что по нему действительно
+// можно связаться, поэтому адрес должен оставаться рабочим.
+const CONTACT_EMAIL = 'klovvergg@gmail.com'
 const CONTACT_TELEGRAM = 'https://t.me/kitobabdullohdomla'
 const UPDATED = '4 сентября 2026'
 
