@@ -252,3 +252,11 @@ export async function subscribeToWebhooks(igUserId, token, fields = webhookField
     params: { subscribed_fields: fields, access_token: token },
   })
 }
+
+// Что Meta РЕАЛЬНО считает подписанным для этого аккаунта. Без этого отсутствие
+// подписки неотличимо от «никто не комментировал»: в обоих случаях вебхук молчит.
+export async function getSubscribedApps(igUserId, token) {
+  return igFetch(`${GRAPH_HOST}/${igUserId}/subscribed_apps`, {
+    params: { access_token: token },
+  })
+}

@@ -202,6 +202,7 @@ export default function Dashboard() {
         <div className="connect-side">
           {connected ? (
             <>
+              <WebhookBadge health={health} loading={healthLoading} />
               <QuotaBadge health={health} loading={healthLoading} />
               <button className="btn" onClick={() => navigate('/accounts')}>
                 Управление
@@ -276,6 +277,27 @@ export default function Dashboard() {
         </section>
       </div>
     </>
+  )
+}
+
+// Подписан ли аккаунт на вебхуки Meta. Если нет — комментарии до нас просто
+// не доходят, и по пустому логу ответов это неотличимо от тишины в комментариях.
+function WebhookBadge({ health, loading }) {
+  if (loading || !health?.webhook) return null
+  const w = health.webhook
+  if (w.subscribed)
+    return (
+      <span className="badge t-green" title={`Meta присылает события: ${w.fields.join(', ')}`}>
+        <CircleCheck size={12} /> вебхуки: {w.fields.join(', ')}
+      </span>
+    )
+  return (
+    <span
+      className="badge t-red"
+      title={w.error || 'Meta не числит ни одной подписки для этого аккаунта — переподключите Instagram'}
+    >
+      <CircleAlert size={12} /> вебхуки не подписаны
+    </span>
   )
 }
 
