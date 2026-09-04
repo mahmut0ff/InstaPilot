@@ -31,8 +31,9 @@ async function createInteraction(accDoc, docId, data) {
       status: 'received',
       createdAt: FieldValue.serverTimestamp(),
     })
+    console.log('webhook: поставлено в очередь type=%s account=%s', data.type, accDoc.id)
   } catch {
-    /* уже существует — повторная доставка */
+    console.log('webhook: повторная доставка, документ уже есть — пропуск')
   }
 }
 
@@ -70,11 +71,23 @@ export default async (req) => {
     return new Response('Bad Request', { status: 400 })
   }
 
+  // Диагностика доставки: без неё отброшенное событие неотличимо от неприсланного.
+  // Логируем только структуру — ни текста комментария, ни ников.
+  console.log(
+    'webhook: entries=%d fields=%s messaging=%d',
+    (payload.entry || []).length,
+    JSON.stringify((payload.entry || []).flatMap((e) => (e.changes || []).map((c) => c.field))),
+    (payload.entry || []).reduce((n, e) => n + (e.messaging || []).length, 0)
+  )
+
   try {
     for (const entry of payload.entry || []) {
       const igUserId = entry.id
       const accDoc = await findAccountByIgId(igUserId)
-      if (!accDoc) continue // не наш аккаунт
+      if (!accDoc) {
+        console.warn('webhook: нет аккаунта с instagramBusinessId=%s — событие отброшено', igUserId)
+        continue // не наш аккаунт
+      }
 
       // --- Комментарии (field: comments) ---
       for (const change of entry.changes || []) {
@@ -83,8 +96,14 @@ export default async (req) => {
         const from = v.from || {}
 
         // Защита от петли: не реагируем на собственные комментарии аккаунта.
-        if (String(from.id) === String(igUserId)) continue
-        if (!v.id || !v.text) continue
+        if (String(from.id) === String(igUserId)) {
+          console.log('webhook: собственный комментарий аккаунта — пропуск (защита от петли)')
+          continue
+        }
+        if (!v.id || !v.text) {
+          console.log('webhook: комментарий без id или текста — пропуск')
+          continue
+        }
 
         await createInteraction(accDoc, String(v.id), {
           type: 'comment',
