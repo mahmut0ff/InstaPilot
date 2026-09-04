@@ -2315,3 +2315,72 @@ textarea {
 ::selection {
   background: rgba(16, 185, 129, 0.2);
 }
+
+/* ── Правовые страницы (/privacy, /data-deletion) ──────────────────────────
+   Публичные, вне layout панели: своя узкая колонка и типографика для текста. */
+.legal {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+  color: var(--text);
+}
+
+.legal-head {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+}
+
+.legal-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+  margin-bottom: 18px;
+}
+
+.legal-head h1 {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.legal-body {
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.legal-body h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 28px 0 10px;
+}
+
+.legal-body p {
+  margin-bottom: 12px;
+}
+
+.legal-body ul {
+  margin: 0 0 12px 20px;
+  list-style: disc;
+}
+
+.legal-body li {
+  margin-bottom: 8px;
+}
+
+.legal-body a {
+  color: var(--green-deep);
+  text-decoration: underline;
+}
+
+.legal-foot {
+  display: flex;
+  gap: 20px;
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}

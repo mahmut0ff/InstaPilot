@@ -12,6 +12,7 @@ import Accounts from './pages/Accounts'
 import Posts from './pages/Posts'
 import Settings from './pages/Settings'
 import Interactions from './pages/Interactions'
+import { DataDeletion, Privacy } from './pages/Legal'
 import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -21,6 +22,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <AccountProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            {/* Правовые страницы — публичные: их адреса Meta проверяет без авторизации. */}
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/data-deletion" element={<DataDeletion />} />
             <Route
               element={
                 <ProtectedRoute>
