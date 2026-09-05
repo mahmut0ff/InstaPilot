@@ -42,6 +42,11 @@ async function pollMedia({ mediaId, token, stateRef, interactions, account, summ
   const known = snap.data()?.bootstrapped === true
   let after = snap.data()?.after ?? null
   let reachedEnd = false
+  // Время последнего обработанного комментария. Без него каждый прогон тратил бы
+  // попытку записи на каждый уже известный комментарий: 141 заведомо провальный
+  // запрос к базе съедал весь бюджет времени, и до половины публикаций дело не доходило.
+  const lastTs = snap.data()?.lastTs ? Date.parse(snap.data().lastTs) : 0
+  let newestTs = lastTs
 
   if (!known) summary.bootstrapping++
 
@@ -71,7 +76,12 @@ async function pollMedia({ mediaId, token, stateRef, interactions, account, summ
         summary.newestSeen = new Date(ts).toISOString()
       }
 
+      if (ts > newestTs) newestTs = ts
       if (!known) continue // первый проход: только доходим до конца
+      if (ts <= lastTs) {
+        summary.alreadySeen++
+        continue // уже обрабатывали — в базу не ходим
+      }
       if (!c.id || !c.text) continue
 
       // Защита от петли: собственные комментарии аккаунта не обрабатываем.
@@ -112,6 +122,7 @@ async function pollMedia({ mediaId, token, stateRef, interactions, account, summ
     {
       after,
       bootstrapped: known || reachedEnd,
+      lastTs: newestTs ? new Date(newestTs).toISOString() : null,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }
@@ -165,6 +176,7 @@ export async function pollComments() {
     newestSeen: null,
     queued: 0,
     duplicates: 0,
+    alreadySeen: 0,
     own: 0,
     errors: 0,
     deadline: false,
