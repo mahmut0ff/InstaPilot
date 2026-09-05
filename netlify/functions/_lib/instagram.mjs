@@ -261,18 +261,17 @@ export async function getRecentMedia(igUserId, token, limit = 3) {
   })
 }
 
-// Комментарии под конкретной публикацией.
-// order=reverse_chronological обязателен: по умолчанию Meta отдаёт самые СТАРЫЕ
-// комментарии, и под постом с сотней обсуждений свежие никогда не попадут в выборку.
-export async function getMediaComments(mediaId, token, limit = 25) {
-  return igFetch(`${GRAPH_HOST}/${mediaId}/comments`, {
-    params: {
-      fields: 'id,text,username,timestamp',
-      order: 'reverse_chronological',
-      limit,
-      access_token: token,
-    },
-  })
+// Комментарии под публикацией — страницами, от старых к новым.
+//
+// Instagram отдаёт их только в таком порядке: параметр order (он есть в Graph API
+// Facebook) здесь игнорируется — проверено 5 сентября 2026, выборка из 25 штук дала
+// комментарии с февраля по август при том, что свежие появлялись ежедневно.
+// Поэтому свежие достаются пролистыванием до конца, а `after` запоминается между
+// прогонами, чтобы не перечитывать всю историю каждый раз.
+export async function getMediaComments(mediaId, token, limit = 50, after = null) {
+  const params = { fields: 'id,text,username,timestamp', limit, access_token: token }
+  if (after) params.after = after
+  return igFetch(`${GRAPH_HOST}/${mediaId}/comments`, { params })
 }
 
 // Что Meta РЕАЛЬНО считает подписанным для этого аккаунта. Без этого отсутствие

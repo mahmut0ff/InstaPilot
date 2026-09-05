@@ -6,6 +6,11 @@
 // своими медиа обычным запросом она разрешает. Поэтому забираем их сами и кладём в
 // ту же очередь `interactions`, откуда их разбирает process-comments.
 //
+// Главная сложность — порядок. Instagram отдаёт комментарии только от старых к новым
+// и игнорирует order=reverse_chronological. Поэтому свежие достаются пролистыванием
+// до последней страницы, а курсор `after` сохраняется в accounts/{id}/poll_state/{mediaId}:
+// следующий прогон продолжает с того места, а не перечитывает всю историю.
+//
 // Дедуп общий с вебхуком: id документа = id комментария, .create() падает на повторе.
 // Поэтому опрос и вебхуки безопасно работают одновременно — если после App Review
 // события всё-таки пойдут, дублей не будет.
@@ -14,17 +19,90 @@ import { adminDb } from './firebaseAdmin.mjs'
 import { readToken } from './tokens.mjs'
 import { getMediaComments, getRecentMedia } from './instagram.mjs'
 
-const MEDIA_PER_RUN = Number(process.env.POLL_MEDIA_LIMIT || 5)
-const COMMENTS_PER_MEDIA = Number(process.env.POLL_COMMENTS_LIMIT || 25)
+const MEDIA_PER_RUN = Number(process.env.POLL_MEDIA_LIMIT || 10)
+const PAGE_SIZE = Number(process.env.POLL_PAGE_SIZE || 50)
+const MAX_PAGES = Number(process.env.POLL_MAX_PAGES || 12) // потолок на медиа за один прогон
 const RUN_DEADLINE_MS = 22000
 
-// Разбирает время комментария (ISO 8601 с офсетом вида +0000) в миллисекунды.
 function parseTs(value) {
   const ms = Date.parse(value)
   return Number.isNaN(ms) ? null : ms
 }
 
-// Обрабатывает один аккаунт. Возвращает, сколько комментариев поставлено в очередь.
+// Пролистывает комментарии одной публикации с сохранённого места до конца.
+// Первый проход по незнакомому медиа только доходит до конца и запоминает курсор:
+// обрабатывать историю нельзя, иначе бот ответит на все старые комментарии разом.
+async function pollMedia({ mediaId, token, stateRef, interactions, account, summary, deadline }) {
+  const stateDoc = stateRef.doc(mediaId)
+  const snap = await stateDoc.get()
+  const known = snap.exists
+  let after = snap.data()?.after ?? null
+
+  if (!known) summary.newMedia++
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (Date.now() > deadline) {
+      summary.deadline = true
+      break
+    }
+
+    let res
+    try {
+      res = await getMediaComments(mediaId, token, PAGE_SIZE, after)
+    } catch (err) {
+      summary.errors++
+      console.warn('poll: медиа %s страница %d: %s', mediaId, page, err.message)
+      break
+    }
+
+    const batch = res?.data || []
+    summary.pages++
+
+    for (const c of batch) {
+      const ts = parseTs(c.timestamp)
+      if (ts == null) continue
+      summary.seen++
+      if (!summary.newestSeen || ts > Date.parse(summary.newestSeen)) {
+        summary.newestSeen = new Date(ts).toISOString()
+      }
+
+      if (!known) continue // первый проход: только доходим до конца
+      if (!c.id || !c.text) continue
+
+      // Защита от петли: собственные комментарии аккаунта не обрабатываем.
+      // Сравниваем по нику — id автора этот эндпоинт не отдаёт.
+      if (account.instagramUsername && c.username === account.instagramUsername) {
+        summary.own++
+        continue
+      }
+
+      try {
+        await interactions.doc(String(c.id)).create({
+          type: 'comment',
+          igCommentId: String(c.id),
+          igMediaId: String(mediaId),
+          parentCommentId: null,
+          authorUsername: c.username || null,
+          authorId: null, // эндпоинт комментариев id автора не возвращает
+          inboundText: String(c.text),
+          source: 'poll',
+          status: 'received',
+          createdAt: FieldValue.serverTimestamp(),
+        })
+        summary.queued++
+      } catch {
+        summary.duplicates++ // уже лежит — доставил вебхук или прошлый прогон
+      }
+    }
+
+    const nextCursor = res?.paging?.cursors?.after
+    if (!res?.paging?.next || !nextCursor || batch.length === 0) break
+    after = nextCursor
+  }
+
+  await stateDoc.set({ after, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+}
+
 async function pollAccount(accDoc, summary, deadline) {
   const account = accDoc.data()
   if (!account.instagramBusinessId) return
@@ -37,15 +115,6 @@ async function pollAccount(accDoc, summary, deadline) {
   }
   summary.accounts++
 
-  // Водяной знак. На первом запуске историю не разгребаем: иначе бот сгенерировал бы
-  // ответы на все старые комментарии разом. Просто фиксируем момент и выходим.
-  const cursorMs = parseTs(account.commentsPollCursor)
-  if (cursorMs == null) {
-    await accDoc.ref.set({ commentsPollCursor: new Date().toISOString() }, { merge: true })
-    summary.initialized++
-    return
-  }
-
   let media
   try {
     media = await getRecentMedia(account.instagramBusinessId, token, MEDIA_PER_RUN)
@@ -55,9 +124,8 @@ async function pollAccount(accDoc, summary, deadline) {
     return
   }
 
+  const stateRef = accDoc.ref.collection('poll_state')
   const interactions = accDoc.ref.collection('interactions')
-  let newestMs = cursorMs
-  summary.cursor = new Date(cursorMs).toISOString()
 
   for (const item of media?.data || []) {
     if (Date.now() > deadline) {
@@ -65,62 +133,7 @@ async function pollAccount(accDoc, summary, deadline) {
       break
     }
     summary.media++
-
-    let comments
-    try {
-      comments = await getMediaComments(item.id, token, COMMENTS_PER_MEDIA)
-    } catch (err) {
-      summary.errors++
-      console.warn('poll: комментарии медиа %s недоступны: %s', item.id, err.message)
-      continue
-    }
-
-    for (const c of comments?.data || []) {
-      const ts = parseTs(c.timestamp)
-      if (ts == null) continue
-      summary.seen++
-      // Диапазон прочитанного: сразу видно, читаем мы свежие комментарии или,
-      // из-за порядка сортировки, застряли на самых старых.
-      if (!summary.newestSeen || ts > Date.parse(summary.newestSeen)) {
-        summary.newestSeen = new Date(ts).toISOString()
-      }
-      if (!summary.oldestSeen || ts < Date.parse(summary.oldestSeen)) {
-        summary.oldestSeen = new Date(ts).toISOString()
-      }
-      if (ts > newestMs) newestMs = ts
-      if (ts <= cursorMs) continue // уже видели в прошлый раз
-
-      // Защита от петли: собственные комментарии аккаунта не обрабатываем.
-      // Здесь сравниваем по нику — id автора этот эндпоинт не отдаёт.
-      if (account.instagramUsername && c.username === account.instagramUsername) {
-        summary.own++
-        continue
-      }
-      if (!c.id || !c.text) continue
-
-      try {
-        await interactions.doc(String(c.id)).create({
-          type: 'comment',
-          igCommentId: String(c.id),
-          igMediaId: String(item.id),
-          parentCommentId: null,
-          authorUsername: c.username || null,
-          authorId: null, // эндпоинт комментариев id автора не возвращает
-          inboundText: String(c.text),
-          source: 'poll',
-          status: 'received',
-          createdAt: FieldValue.serverTimestamp(),
-        })
-        summary.queued++
-      } catch {
-        summary.duplicates++ // уже лежит — доставил вебхук или прошлый запуск
-      }
-    }
-  }
-
-  // Двигаем водяной знак только вперёд и только если что-то прочитали.
-  if (newestMs > cursorMs) {
-    await accDoc.ref.set({ commentsPollCursor: new Date(newestMs).toISOString() }, { merge: true })
+    await pollMedia({ mediaId: String(item.id), token, stateRef, interactions, account, summary, deadline })
   }
 }
 
@@ -128,12 +141,11 @@ async function pollAccount(accDoc, summary, deadline) {
 export async function pollComments() {
   const summary = {
     accounts: 0,
-    initialized: 0,
     media: 0,
+    newMedia: 0,
+    pages: 0,
     seen: 0,
     newestSeen: null,
-    oldestSeen: null,
-    cursor: null,
     queued: 0,
     duplicates: 0,
     own: 0,
