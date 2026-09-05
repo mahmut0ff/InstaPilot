@@ -35,10 +35,15 @@ function parseTs(value) {
 async function pollMedia({ mediaId, token, stateRef, interactions, account, summary, deadline }) {
   const stateDoc = stateRef.doc(mediaId)
   const snap = await stateDoc.get()
-  const known = snap.exists
+  // known — НЕ «видели раньше», а «дочитали историю до конца». Разница принципиальна:
+  // первый проход по посту с сотнями комментариев не укладывается в лимит времени,
+  // и если считать публикацию известной уже со второго прогона, остаток истории
+  // уедет в очередь как новые комментарии (так и случилось 5 сентября — 141 штука).
+  const known = snap.data()?.bootstrapped === true
   let after = snap.data()?.after ?? null
+  let reachedEnd = false
 
-  if (!known) summary.newMedia++
+  if (!known) summary.bootstrapping++
 
   for (let page = 0; page < MAX_PAGES; page++) {
     if (Date.now() > deadline) {
@@ -96,11 +101,22 @@ async function pollMedia({ mediaId, token, stateRef, interactions, account, summ
     }
 
     const nextCursor = res?.paging?.cursors?.after
-    if (!res?.paging?.next || !nextCursor || batch.length === 0) break
+    if (!res?.paging?.next || !nextCursor || batch.length === 0) {
+      reachedEnd = true // дочитали до конца ленты — только теперь пост «известен»
+      break
+    }
     after = nextCursor
   }
 
-  await stateDoc.set({ after, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+  await stateDoc.set(
+    {
+      after,
+      bootstrapped: known || reachedEnd,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  )
+  if (!known && reachedEnd) summary.bootstrapped++
 }
 
 async function pollAccount(accDoc, summary, deadline) {
@@ -142,7 +158,8 @@ export async function pollComments() {
   const summary = {
     accounts: 0,
     media: 0,
-    newMedia: 0,
+    bootstrapping: 0,
+    bootstrapped: 0,
     pages: 0,
     seen: 0,
     newestSeen: null,
