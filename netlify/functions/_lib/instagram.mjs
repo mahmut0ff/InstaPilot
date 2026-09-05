@@ -262,9 +262,16 @@ export async function getRecentMedia(igUserId, token, limit = 3) {
 }
 
 // Комментарии под конкретной публикацией.
+// order=reverse_chronological обязателен: по умолчанию Meta отдаёт самые СТАРЫЕ
+// комментарии, и под постом с сотней обсуждений свежие никогда не попадут в выборку.
 export async function getMediaComments(mediaId, token, limit = 25) {
   return igFetch(`${GRAPH_HOST}/${mediaId}/comments`, {
-    params: { fields: 'id,text,username,timestamp', limit, access_token: token },
+    params: {
+      fields: 'id,text,username,timestamp',
+      order: 'reverse_chronological',
+      limit,
+      access_token: token,
+    },
   })
 }
 

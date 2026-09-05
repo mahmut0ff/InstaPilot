@@ -57,6 +57,7 @@ async function pollAccount(accDoc, summary, deadline) {
 
   const interactions = accDoc.ref.collection('interactions')
   let newestMs = cursorMs
+  summary.cursor = new Date(cursorMs).toISOString()
 
   for (const item of media?.data || []) {
     if (Date.now() > deadline) {
@@ -78,6 +79,14 @@ async function pollAccount(accDoc, summary, deadline) {
       const ts = parseTs(c.timestamp)
       if (ts == null) continue
       summary.seen++
+      // Диапазон прочитанного: сразу видно, читаем мы свежие комментарии или,
+      // из-за порядка сортировки, застряли на самых старых.
+      if (!summary.newestSeen || ts > Date.parse(summary.newestSeen)) {
+        summary.newestSeen = new Date(ts).toISOString()
+      }
+      if (!summary.oldestSeen || ts < Date.parse(summary.oldestSeen)) {
+        summary.oldestSeen = new Date(ts).toISOString()
+      }
       if (ts > newestMs) newestMs = ts
       if (ts <= cursorMs) continue // уже видели в прошлый раз
 
@@ -122,6 +131,9 @@ export async function pollComments() {
     initialized: 0,
     media: 0,
     seen: 0,
+    newestSeen: null,
+    oldestSeen: null,
+    cursor: null,
     queued: 0,
     duplicates: 0,
     own: 0,
