@@ -23,6 +23,11 @@ const MEDIA_PER_RUN = Number(process.env.POLL_MEDIA_LIMIT || 10)
 const PAGE_SIZE = Number(process.env.POLL_PAGE_SIZE || 50)
 const MAX_PAGES = Number(process.env.POLL_MAX_PAGES || 12) // потолок на медиа за один прогон
 const RUN_DEADLINE_MS = 22000
+// Абсолютный предел возраста: опрос ищет НОВЫЕ комментарии, и апрельский комментарий
+// не должен попадать в очередь ни при каких обстоятельствах. Это страховка поверх
+// курсоров и флагов — 5 сентября три ошибки подряд в их логике отправили в обработку
+// сотни старых комментариев, и любая из них была бы безвредна при таком пределе.
+const MAX_AGE_MS = Number(process.env.POLL_MAX_AGE_HOURS || 48) * 3600 * 1000
 
 function parseTs(value) {
   const ms = Date.parse(value)
@@ -81,6 +86,10 @@ async function pollMedia({ mediaId, token, stateRef, interactions, account, summ
       if (ts <= lastTs) {
         summary.alreadySeen++
         continue // уже обрабатывали — в базу не ходим
+      }
+      if (Date.now() - ts > MAX_AGE_MS) {
+        summary.tooOld++
+        continue // старьё: отвечать на него бот не должен ни при каких сбоях курсоров
       }
       if (!c.id || !c.text) continue
 
@@ -177,6 +186,7 @@ export async function pollComments() {
     queued: 0,
     duplicates: 0,
     alreadySeen: 0,
+    tooOld: 0,
     own: 0,
     errors: 0,
     deadline: false,
