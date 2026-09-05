@@ -3,7 +3,13 @@
 // Требует авторизации и владения аккаунтом.
 import { requireOwnedAccount, requireUser } from './_lib/auth.mjs'
 import { readToken } from './_lib/tokens.mjs'
-import { getProfile, getPublishingLimit, getSubscribedApps } from './_lib/instagram.mjs'
+import {
+  getMediaComments,
+  getProfile,
+  getPublishingLimit,
+  getRecentMedia,
+  getSubscribedApps,
+} from './_lib/instagram.mjs'
 import { fail, HttpError, json } from './_lib/http.mjs'
 
 export default async (req) => {
@@ -48,6 +54,24 @@ export default async (req) => {
       }
     }
 
+    // Доступны ли комментарии через API. Если да — автоответы можно строить на опросе
+    // публикаций, не дожидаясь Advanced Access, который нужен только вебхукам.
+    let commentsApi = null
+    if (igReachable) {
+      try {
+        const media = await getRecentMedia(account.instagramBusinessId, token, 1)
+        const first = media?.data?.[0]
+        if (!first) {
+          commentsApi = { available: false, reason: 'у аккаунта нет публикаций' }
+        } else {
+          const res = await getMediaComments(first.id, token, 25)
+          commentsApi = { available: true, mediaId: first.id, count: (res?.data || []).length }
+        }
+      } catch (err) {
+        commentsApi = { available: false, error: err.message }
+      }
+    }
+
     return json({
       ok: true,
       connected: true,
@@ -59,6 +83,7 @@ export default async (req) => {
       mediaCount: profile?.media_count ?? null,
       quota, // { used, total } | null
       webhook, // { subscribed, fields[] } | { subscribed:false, error } | null
+      commentsApi, // { available, count } | { available:false, error|reason } | null
       checkedAt: Date.now(),
     })
   } catch (err) {

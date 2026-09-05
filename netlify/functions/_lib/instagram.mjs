@@ -253,6 +253,21 @@ export async function subscribeToWebhooks(igUserId, token, fields = webhookField
   })
 }
 
+// Последние публикации аккаунта. Нужны, чтобы читать комментарии опросом —
+// это путь в обход вебхуков, недоступных без Advanced Access.
+export async function getRecentMedia(igUserId, token, limit = 3) {
+  return igFetch(`${GRAPH_HOST}/${igUserId}/media`, {
+    params: { fields: 'id,timestamp', limit, access_token: token },
+  })
+}
+
+// Комментарии под конкретной публикацией.
+export async function getMediaComments(mediaId, token, limit = 25) {
+  return igFetch(`${GRAPH_HOST}/${mediaId}/comments`, {
+    params: { fields: 'id,text,username,timestamp', limit, access_token: token },
+  })
+}
+
 // Что Meta РЕАЛЬНО считает подписанным для этого аккаунта. Без этого отсутствие
 // подписки неотличимо от «никто не комментировал»: в обоих случаях вебхук молчит.
 export async function getSubscribedApps(igUserId, token) {

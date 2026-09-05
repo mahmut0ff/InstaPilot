@@ -202,6 +202,7 @@ export default function Dashboard() {
         <div className="connect-side">
           {connected ? (
             <>
+              <CommentsApiBadge health={health} loading={healthLoading} />
               <WebhookBadge health={health} loading={healthLoading} />
               <QuotaBadge health={health} loading={healthLoading} />
               <button className="btn" onClick={() => navigate('/accounts')}>
@@ -277,6 +278,24 @@ export default function Dashboard() {
         </section>
       </div>
     </>
+  )
+}
+
+// Читаются ли комментарии обычным запросом к API. Это запасной путь к автоответам:
+// он не требует Advanced Access, который нужен только для доставки вебхуков.
+function CommentsApiBadge({ health, loading }) {
+  if (loading || !health?.commentsApi) return null
+  const c = health.commentsApi
+  if (c.available)
+    return (
+      <span className="badge t-green" title={`Публикация ${c.mediaId}`}>
+        <CircleCheck size={12} /> комментарии читаются: {c.count}
+      </span>
+    )
+  return (
+    <span className="badge t-red" title={c.error || c.reason}>
+      <CircleAlert size={12} /> комментарии не читаются
+    </span>
   )
 }
 
